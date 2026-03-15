@@ -28,12 +28,28 @@ const setCharacter = (
           async (gltf) => {
             character = gltf.scene;
             await renderer.compileAsync(character, camera, scene);
+            const blackMeshes: Record<string, number> = {
+              "BODY.SHIRT": 0x080808,
+              "hair":       0x080808,
+              "Pant":       0x0d0d0d,
+              "Shoe":       0x060606,
+              "Sole":       0x060606,
+            };
             character.traverse((child: any) => {
               if (child.isMesh) {
                 const mesh = child as THREE.Mesh;
                 child.castShadow = true;
                 child.receiveShadow = true;
                 mesh.frustumCulled = true;
+                const color = blackMeshes[child.name];
+                if (color !== undefined) {
+                  const mats = Array.isArray(mesh.material)
+                    ? mesh.material
+                    : [mesh.material];
+                  mats.forEach((mat: any) => {
+                    if (mat && mat.color) mat.color.set(color);
+                  });
+                }
               }
             });
             resolve(gltf);
