@@ -28,12 +28,28 @@ const setCharacter = (
           async (gltf) => {
             character = gltf.scene;
             await renderer.compileAsync(character, camera, scene);
-            const blackMeshes: Record<string, number> = {
-              "BODY.SHIRT": 0x080808,
-              "hair":       0x080808,
-              "Pant":       0x0d0d0d,
-              "Shoe":       0x060606,
-              "Sole":       0x060606,
+            type MatOverride = {
+              color: number;
+              roughness: number;
+              metalness: number;
+              clearMap?: boolean;
+            };
+            const meshOverrides: Record<string, MatOverride> = {
+              // Skin – warm medium brown, matte
+              "Neck":       { color: 0x9b6b3a, roughness: 0.88, metalness: 0, clearMap: true },
+              "Hand":       { color: 0x9b6b3a, roughness: 0.88, metalness: 0, clearMap: true },
+              "Ear.001":    { color: 0x9b6b3a, roughness: 0.88, metalness: 0, clearMap: true },
+              // Hair → white cap approximation
+              "hair":       { color: 0xf8f8f8, roughness: 0.85, metalness: 0, clearMap: true },
+              // Eyebrows – stay thick black
+              "Eyebrow":    { color: 0x0a0a0a, roughness: 0.9,  metalness: 0, clearMap: true },
+              // Shirt – soft matte dark grey (not shiny)
+              "BODY.SHIRT": { color: 0x282828, roughness: 1.0,  metalness: 0, clearMap: true },
+              // Pants – matching matte dark grey
+              "Pant":       { color: 0x242424, roughness: 1.0,  metalness: 0, clearMap: true },
+              // Shoes – chunky white matte slip-on look
+              "Shoe":       { color: 0xefefef, roughness: 0.92, metalness: 0, clearMap: true },
+              "Sole":       { color: 0xe8e8e8, roughness: 0.95, metalness: 0, clearMap: true },
             };
             character.traverse((child: any) => {
               if (child.isMesh) {
@@ -41,13 +57,24 @@ const setCharacter = (
                 child.castShadow = true;
                 child.receiveShadow = true;
                 mesh.frustumCulled = true;
-                const color = blackMeshes[child.name];
-                if (color !== undefined) {
+                const override = meshOverrides[child.name];
+                if (override) {
                   const mats = Array.isArray(mesh.material)
                     ? mesh.material
                     : [mesh.material];
                   mats.forEach((mat: any) => {
-                    if (mat && mat.color) mat.color.set(color);
+                    if (!mat) return;
+                    if (mat.color)     mat.color.set(override.color);
+                    mat.roughness    = override.roughness;
+                    mat.metalness    = override.metalness;
+                    if (override.clearMap) {
+                      mat.map          = null;
+                      mat.roughnessMap = null;
+                      mat.metalnessMap = null;
+                      mat.emissiveMap  = null;
+                      mat.emissive?.set(0x000000);
+                    }
+                    mat.needsUpdate  = true;
                   });
                 }
               }
