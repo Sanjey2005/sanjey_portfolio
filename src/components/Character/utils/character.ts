@@ -40,7 +40,7 @@ const setCharacter = (
               "Hand":       { color: 0x9b6b3a, roughness: 0.88, metalness: 0, clearMap: true },
               "Ear.001":    { color: 0x9b6b3a, roughness: 0.88, metalness: 0, clearMap: true },
               // Hair → white cap approximation
-              "hair":       { color: 0xf8f8f8, roughness: 0.85, metalness: 0, clearMap: true },
+              "hair":       { color: 0x080808, roughness: 0.85, metalness: 0, clearMap: true },
               // Eyebrows – stay thick black
               "Eyebrow":    { color: 0x0a0a0a, roughness: 0.9,  metalness: 0, clearMap: true },
               // Shirt – soft matte dark grey (not shiny)
