@@ -3,100 +3,146 @@ import { DRACOLoader, GLTF, GLTFLoader } from "three-stdlib";
 import { setCharTimeline, setAllTimeline } from "../../utils/GsapScroll";
 import { decryptFile } from "./decrypt";
 
-// The model has no cap, so build a baseball cap on the head bone (spine006) to follow
-// head/mouse-look. Sizes are in head-bone space: eyebrows top out at y 1.72, ear tops at
-// y 1.42, the forehead reaches z 1.3 and the head is about ±1.15 wide.
+// The model has no cap, so build a six-panel baseball cap on the head bone (spine006) so
+// it follows head/mouse-look. Everything is in head-bone space. The face mesh is only a
+// front mask (±0.93 wide at the temples); the hair mesh is the rest of the skull.
+// The crown is an egg fitted just outside the face mask: centre (0, 1.5, 0.5), half-width
+// 0.98, 0.87 to the front, 1.47 to the back, 0.9 up (1.4 down, for the hair tuck below).
+const C = new THREE.Vector3(0, 1.5, 0.5);
+const RX = 0.98, RY_UP = 0.9, RY_DOWN = 1.4, RZ_FRONT = 0.87, RZ_BACK = 1.47;
+// Rim height by azimuth: above the eyebrows at the front, above the ears at the sides,
+// a little higher than the nape at the back, with an arched strap opening (±0.45 rad).
+const BACK_GAP = 0.45;
+const baseRimY = (phi: number) => {
+  const c = Math.cos(phi);
+  return 1.45 + 0.47 * Math.max(c, 0) - 0.1 * Math.max(-c, 0);
+};
+const rimY = (phi: number) => {
+  const fromBack = Math.acos(-Math.cos(phi));
+  return baseRimY(phi) + 0.2 * Math.sqrt(Math.max(0, 1 - (fromBack / BACK_GAP) ** 2));
+};
+const egg = (theta: number, phi: number, scale = 1) => {
+  const cy = Math.cos(theta), sy = Math.sin(theta);
+  return new THREE.Vector3(
+    RX * sy * Math.sin(phi) * scale,
+    C.y + (cy > 0 ? RY_UP : RY_DOWN) * cy * scale,
+    C.z + (Math.cos(phi) > 0 ? RZ_FRONT : RZ_BACK) * sy * Math.cos(phi) * scale
+  );
+};
+const rimTheta = (phi: number, rim = rimY) => {
+  const dy = rim(phi) - C.y;
+  return Math.acos(THREE.MathUtils.clamp(dy / (dy > 0 ? RY_UP : RY_DOWN), -1, 1));
+};
+// Grid of points → indexed mesh; wrapU joins the last column to the first.
+const gridGeometry = (rows: THREE.Vector3[][], flip: boolean, wrapU = false) => {
+  const cols = rows[0].length;
+  const geo = new THREE.BufferGeometry().setFromPoints(rows.flat());
+  const index: number[] = [];
+  for (let i = 0; i < rows.length - 1; i++)
+    for (let j = 0; j < (wrapU ? cols : cols - 1); j++) {
+      const a = i * cols + j, b = (i + 1) * cols + j;
+      const c = i * cols + ((j + 1) % cols), d = (i + 1) * cols + ((j + 1) % cols);
+      index.push(...(flip ? [a, b, c, c, b, d] : [a, c, b, b, c, d]));
+    }
+  geo.setIndex(index);
+  geo.computeVertexNormals();
+  return geo;
+};
+
 const addCap = (character: THREE.Object3D) => {
   const head = character.getObjectByName("spine006");
   if (!head) return;
-  // A little neutral emissive keeps the cap reading white under the lavender lights.
-  const white = new THREE.MeshStandardMaterial({ color: 0xe8e8ea, roughness: 0.75, emissive: 0x3a3a3a });
-  const seamMat = new THREE.MeshStandardMaterial({ color: 0xc4c4c8, roughness: 0.8 });
+  // Neutral emissive keeps the white parts white under the lavender lights.
+  const white = new THREE.MeshStandardMaterial({ color: 0xf2f2f2, roughness: 0.8, emissive: 0x404040 });
+  const seamMat = new THREE.MeshStandardMaterial({ color: 0xc6c6ca, roughness: 0.85, emissive: 0x202020 });
+  const under = new THREE.MeshStandardMaterial({ color: 0x55555a, roughness: 0.9, emissive: 0x141414, side: THREE.DoubleSide });
   const black = new THREE.MeshStandardMaterial({ color: 0x111111, roughness: 0.8 });
   const cap = new THREE.Group();
 
-  // Crown: a low hemisphere tilted front-up, so its rim sits above the eyebrows at the
-  // front, just above the ears at the sides and lower at the back.
-  const sx = 1.25, sy = 0.9, sz = 1.24;
-  const crownGeo = new THREE.SphereGeometry(1, 48, 24, 0, Math.PI * 2, 0, Math.PI / 2);
-  const crown = new THREE.Mesh(crownGeo, white);
-  // Grey lining, so the lavender lights don't show a pink band inside the rim
-  crown.add(new THREE.Mesh(crownGeo, new THREE.MeshStandardMaterial({ color: 0x77777c, roughness: 0.9, side: THREE.BackSide })));
-  crown.scale.set(sx, sy, sz);
-  crown.position.set(0, 1.5, 0.12);
-  crown.rotation.x = -0.22;
-  crown.updateMatrix();
-  cap.add(crown);
+  // Crown: the egg above the rim curve, rim row first, apex last
+  const SEG = 72, ROWS = 18;
+  const crownRows = Array.from({ length: ROWS + 1 }, (_, i) =>
+    Array.from({ length: SEG }, (_, j) => {
+      const phi = (j / SEG) * Math.PI * 2;
+      return egg(rimTheta(phi) * (1 - i / ROWS), phi);
+    })
+  );
+  const crownGeo = gridGeometry(crownRows, false, true);
+  cap.add(new THREE.Mesh(crownGeo, white));
+  cap.add(new THREE.Mesh(crownGeo, new THREE.MeshStandardMaterial({ color: 0x77777c, roughness: 0.9, side: THREE.BackSide })));
 
-  // Six panel seams and a top button (in the crown's unit-sphere space)
+  // Six panel seams and the top button
   for (let k = 0; k < 6; k++) {
     const phi = (k * Math.PI) / 3;
-    const pts = Array.from({ length: 12 }, (_, i) => {
-      const t = (i / 11) * (Math.PI / 2);
-      return new THREE.Vector3(Math.sin(t) * Math.cos(phi), Math.cos(t), Math.sin(t) * Math.sin(phi)).multiplyScalar(1.004);
-    });
-    crown.add(new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), 24, 0.01, 4), seamMat));
+    const pts = Array.from({ length: 16 }, (_, i) => egg(rimTheta(phi) * (1 - i / 15), phi, 1.006));
+    cap.add(new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), 32, 0.008, 4), seamMat));
   }
-  const button = new THREE.Mesh(new THREE.SphereGeometry(0.07, 12, 8), white);
-  button.position.y = 1;
-  button.scale.set(1 / sx, 1 / sy, 1 / sz);
-  crown.add(button);
-
-  // Visor: front-only bill from the crown's front rim, arched down at the sides,
-  // with a black band along its front edge. Its back part tucks under the crown.
-  const W = 0.9, D = 0.85; // half-width, reach in front of the rim
-  const front = new THREE.Vector3(0, 0, 1).applyMatrix4(crown.matrix);
-  const side = new THREE.Vector3(W / sx, 0, Math.sqrt(1 - (W / sx) ** 2)).applyMatrix4(crown.matrix);
-  const z0 = side.z - front.z; // the bill's sides meet the crown rim here
-  const arch = (front.y - side.y) / (W * W);
-  const outer = (t: number) => new THREE.Vector2(W * Math.cos(t), z0 + (D - z0) * Math.sin(t));
-  const shape = new THREE.Shape(Array.from({ length: 41 }, (_, i) => outer((i / 40) * Math.PI)));
-  shape.lineTo(-W, z0 - 0.5);
-  shape.lineTo(W, z0 - 0.5);
-  const visorGeo = new THREE.ExtrudeGeometry(shape, { depth: 0.06, bevelEnabled: false, curveSegments: 40 });
-  visorGeo.rotateX(Math.PI / 2); // shape +y → +z (forward), thickness → -y
-  const p = visorGeo.attributes.position;
-  for (let i = 0; i < p.count; i++) p.setY(i, p.getY(i) - arch * p.getX(i) ** 2);
-  visorGeo.computeVertexNormals();
-  // The bill faces the lavender point light, so it gets a dimmer diffuse plus neutral emissive
-  // to stay light grey; its underside is darker grey.
-  const n = visorGeo.attributes.normal;
-  const under = new THREE.Color(0x77777c), top = new THREE.Color(0xa8a8ac);
-  visorGeo.setAttribute("color", new THREE.Float32BufferAttribute(
-    Array.from({ length: n.count }, (_, i) => (n.getY(i) < -0.5 ? under : top).toArray()).flat(), 3
-  ));
-  const edge = Array.from({ length: 41 }, (_, i) => {
-    const o = outer((i / 40) * Math.PI);
-    return new THREE.Vector3(o.x, -0.03 - arch * o.x * o.x, o.y);
+  // Strap across the back opening, along the rim it would otherwise have
+  const strap = Array.from({ length: 13 }, (_, i) => {
+    const phi = Math.PI + BACK_GAP * 1.1 * (i / 6 - 1);
+    return egg(rimTheta(phi, baseRimY), phi, 1.012).setY(baseRimY(phi) + 0.05);
   });
-  const visor = new THREE.Group().add(
-    new THREE.Mesh(visorGeo, new THREE.MeshStandardMaterial({ color: 0xe8e8ea, roughness: 0.9, emissive: 0x6a6a6c, vertexColors: true })),
-    new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(edge), 60, 0.04, 8), black)
+  cap.add(new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(strap), 24, 0.035, 6), seamMat));
+  const button = new THREE.Mesh(new THREE.SphereGeometry(0.075, 16, 8), white);
+  button.position.copy(egg(0, 0)).y += 0.02;
+  button.scale.y = 0.55;
+  cap.add(button);
+
+  // Bill: from the front rim (±70°), tapering to the sides, angled down, with thickness,
+  // a darker underside and a rounded black front edge. Its first row tucks under the crown.
+  const SPAN = THREE.MathUtils.degToRad(70), LEN = 0.78, DROP = Math.sin(0.08), TH = 0.05;
+  const V = [-0.1, 0, 0.25, 0.5, 0.75, 1];
+  const billTop = V.map((v) =>
+    Array.from({ length: 41 }, (_, k) => {
+      const u = k / 20 - 1, phi = u * SPAN;
+      const rim = egg(rimTheta(phi), phi);
+      const out = new THREE.Vector3(Math.sin(phi), 0, Math.cos(phi)).lerp(new THREE.Vector3(0, 0, 1), 0.5).normalize();
+      const len = v < 0 ? v : v * LEN * Math.sqrt(1 - u * u);
+      return rim.addScaledVector(out, len).setY(rim.y - Math.max(len, 0) * DROP);
+    })
   );
-  visor.position.copy(front).add(new THREE.Vector3(0, 0.05, 0.06)); // clear of the forehead
-  visor.rotation.x = 0.06; // bill tipped slightly down
-  cap.add(visor);
+  const billBottom = billTop.map((row) => row.map((p) => p.clone().setY(p.y - TH)));
+  // The bill's top faces the magenta-ish key light, so its albedo is half-way to the inverse
+  // tint (fully inverse turns green when the head tips down) plus a neutral emissive.
+  const billWhite = new THREE.MeshStandardMaterial({ color: 0xcde6d2, roughness: 0.9, emissive: 0x646464 });
+  cap.add(new THREE.Mesh(gridGeometry(billTop, true), billWhite));
+  cap.add(new THREE.Mesh(gridGeometry(billBottom, false), under));
+  const edge = billTop[V.length - 1].map((p) => p.clone().setY(p.y - TH / 2));
+  cap.add(new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(edge), 80, TH / 2 + 0.012, 8), black));
 
   cap.traverse((o) => { o.castShadow = true; o.receiveShadow = true; });
   head.add(cap);
 
-  // Pull any hair above the crown's rim inside it; hair below the rim (sideburns) is untouched.
+  // Tuck the hair: above the rim it goes just inside the crown; just below the rim it may
+  // only sit slightly outside the crown's continued silhouette (short sideburns, no bulge).
   const hair = head.getObjectByName("hair") as THREE.Mesh | undefined;
-  if (hair) {
-    hair.updateMatrix();
-    const toCrown = crown.matrix.clone().invert().multiply(hair.matrix);
-    const fromCrown = toCrown.clone().invert();
-    const pos = hair.geometry.attributes.position;
-    const v = new THREE.Vector3();
-    for (let i = 0; i < pos.count; i++) {
-      v.fromBufferAttribute(pos, i).applyMatrix4(toCrown);
-      if (v.y > -0.05 && v.length() > 0.95) {
-        v.setLength(0.95).applyMatrix4(fromCrown);
-        pos.setXYZ(i, v.x, v.y, v.z);
+  if (!hair) return;
+  hair.updateMatrix();
+  const toHead = hair.matrix, toHair = hair.matrix.clone().invert();
+  const pos = hair.geometry.attributes.position;
+  const v = new THREE.Vector3();
+  for (let i = 0; i < pos.count; i++) {
+    v.fromBufferAttribute(pos, i).applyMatrix4(toHead);
+    const dy = v.y - C.y, dz = v.z - C.z;
+    const ry = dy > 0 ? RY_UP : RY_DOWN, rz = dz > 0 ? RZ_FRONT : RZ_BACK;
+    const ux = v.x / RX, uy = dy / ry, uz = dz / rz;
+    const phi = Math.atan2(ux, uz);
+    const r = Math.hypot(ux, uy, uz);
+    if (v.y > rimY(phi) - 0.03) {
+      if (r > 0.95) v.set(0, C.y, C.z).add(new THREE.Vector3(ux * RX, uy * ry, uz * rz).multiplyScalar(0.95 / r));
+    } else {
+      const uh = Math.hypot(ux, uz), allowed = 1.05 * Math.sqrt(Math.max(0, 1 - uy * uy));
+      const w = THREE.MathUtils.smoothstep(v.y, 0.75, 1.0);
+      if (uh > allowed && w > 0) {
+        const k = THREE.MathUtils.lerp(1, allowed / uh, w);
+        v.set(v.x * k, v.y, C.z + dz * k);
       }
     }
-    pos.needsUpdate = true;
+    v.applyMatrix4(toHair);
+    pos.setXYZ(i, v.x, v.y, v.z);
   }
+  pos.needsUpdate = true;
+  hair.geometry.computeVertexNormals();
 };
 
 const setCharacter = (
@@ -190,6 +236,9 @@ const setCharacter = (
               }
             });
             addCap(character);
+            // Dev-only hook for the cap turntable check: /?capdebug
+            if (import.meta.env.DEV && new URLSearchParams(location.search).has("capdebug"))
+              ((window as any).__capdebug ||= []).push({ character, camera, scene });
             resolve(gltf);
             setCharTimeline(character, camera);
             setAllTimeline();
