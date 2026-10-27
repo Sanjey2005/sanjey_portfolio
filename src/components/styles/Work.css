@@ -85,6 +85,9 @@
 .work-info > p {
   width: 90%;
 }
+.work-info > p + h4 {
+  margin-top: 14px;
+}
 .work-image {
   display: flex;
   width: 100%;
