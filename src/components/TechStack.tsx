@@ -13,15 +13,22 @@ import {
 
 const textureLoader = new THREE.TextureLoader();
 const imageUrls = [
-  "/images/react2.webp",
-  "/images/next2.webp",
-  "/images/node2.webp",
-  "/images/express.webp",
-  "/images/mongo.webp",
-  "/images/mysql.webp",
-  "/images/typescript.webp",
-  "/images/javascript.webp",
-];
+  "python",
+  "java",
+  "cpp",
+  "typescript",
+  "javascript",
+  "react",
+  "nextjs",
+  "fastapi",
+  "django",
+  "pytorch",
+  "opencv",
+  "postgresql",
+  "mongodb",
+  "redis",
+  "docker",
+].map((name) => `/images/stack/${name}.webp`);
 const textures = imageUrls.map((url) => textureLoader.load(url));
 
 const sphereGeometry = new THREE.SphereGeometry(1, 28, 28);
@@ -193,7 +200,7 @@ const TechStack = () => {
             <SphereGeo
               key={i}
               {...props}
-              material={materials[Math.floor(Math.random() * materials.length)]}
+              material={materials[i % materials.length]}
               isActive={isActive}
             />
           ))}
