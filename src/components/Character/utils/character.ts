@@ -1,5 +1,5 @@
 import * as THREE from "three";
-import { DRACOLoader, GLTF, GLTFLoader } from "three-stdlib";
+import { DRACOLoader, GLTF, GLTFLoader, TessellateModifier, mergeVertices } from "three-stdlib";
 import { setCharTimeline, setAllTimeline } from "../../utils/GsapScroll";
 import { decryptFile } from "./decrypt";
 
@@ -118,9 +118,23 @@ const addCap = (character: THREE.Object3D) => {
   const hair = head.getObjectByName("hair") as THREE.Mesh | undefined;
   if (!hair) return;
   hair.updateMatrix();
+  // The hair mesh is coarse (485 vertices); subdivide it (edges ≤ ~0.08 in head space) so
+  // the tuck and the hairline fade come out smooth.
+  hair.geometry = mergeVertices(new TessellateModifier(0.008, 6).modify(hair.geometry));
   const toHead = hair.matrix, toHair = hair.matrix.clone().invert();
   const pos = hair.geometry.attributes.position;
   const v = new THREE.Vector3();
+  // The hair mesh is also the back of the skull, so below a short-haircut hairline it is
+  // recoloured to skin instead of cut away: just under the cap's back edge, sweeping down
+  // behind the ears to the sideburns, which stay hair.
+  const HAIR = new THREE.Color(0x080808), SKIN = new THREE.Color(0xd09468), mix = new THREE.Color();
+  const colors: number[] = [];
+  const hairlineY = (phi: number) => {
+    const fromBack = Math.acos(-Math.cos(phi)), edge = Math.PI / 2 - 0.35;
+    return fromBack <= edge
+      ? 0.95 - 0.2 * (fromBack / edge) ** 2
+      : THREE.MathUtils.lerp(0.75, -1, (fromBack - edge) / 0.35);
+  };
   for (let i = 0; i < pos.count; i++) {
     v.fromBufferAttribute(pos, i).applyMatrix4(toHead);
     const dy = v.y - C.y, dz = v.z - C.z;
@@ -138,11 +152,25 @@ const addCap = (character: THREE.Object3D) => {
         v.set(v.x * k, v.y, C.z + dz * k);
       }
     }
+    const hl = hairlineY(phi);
+    // Behind the ears, slim the lower back of the head: below y 0.7 the face mask wraps
+    // round the back (z -0.7) and becomes the nape, so the hair tucks just inside it there
+    // and blends back to its own surface by y 1.05 (no ledge, no hood).
+    const behind = 1 - THREE.MathUtils.smoothstep(v.z, 0, 0.5);
+    const k = THREE.MathUtils.lerp(1, THREE.MathUtils.lerp(0.72, 1, THREE.MathUtils.smoothstep(v.y, 0.62, 1.05)), behind);
+    v.set(v.x * k, v.y, -0.1 + (v.z + 0.1) * k);
+    // Soft fade (the hair mesh is too coarse for a crisp edge)
+    colors.push(...mix.lerpColors(SKIN, HAIR, THREE.MathUtils.smoothstep(v.y, hl - 0.2, hl + 0.08)).toArray());
     v.applyMatrix4(toHair);
     pos.setXYZ(i, v.x, v.y, v.z);
   }
   pos.needsUpdate = true;
   hair.geometry.computeVertexNormals();
+  hair.geometry.setAttribute("color", new THREE.Float32BufferAttribute(colors, 3));
+  const hairMat = hair.material as THREE.MeshStandardMaterial;
+  hairMat.color.set(0xffffff);
+  hairMat.vertexColors = true;
+  hairMat.needsUpdate = true;
 };
 
 const setCharacter = (
