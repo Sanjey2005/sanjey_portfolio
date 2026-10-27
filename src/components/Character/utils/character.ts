@@ -5,7 +5,7 @@ import { decryptFile } from "./decrypt";
 
 // The model has no cap, so build a baseball cap on the head bone (spine006) to follow
 // head/mouse-look. Sizes are in head-bone space: eyebrows top out at y 1.72, ear tops at
-// y 1.42, and the head is about ±1.15 wide.
+// y 1.42, the forehead reaches z 1.3 and the head is about ±1.15 wide.
 const addCap = (character: THREE.Object3D) => {
   const head = character.getObjectByName("spine006");
   if (!head) return;
@@ -17,14 +17,14 @@ const addCap = (character: THREE.Object3D) => {
 
   // Crown: a low hemisphere tilted front-up, so its rim sits above the eyebrows at the
   // front, just above the ears at the sides and lower at the back.
-  const sx = 1.1, sy = 0.85, sz = 1.18;
+  const sx = 1.25, sy = 0.9, sz = 1.24;
   const crownGeo = new THREE.SphereGeometry(1, 48, 24, 0, Math.PI * 2, 0, Math.PI / 2);
   const crown = new THREE.Mesh(crownGeo, white);
   // Grey lining, so the lavender lights don't show a pink band inside the rim
   crown.add(new THREE.Mesh(crownGeo, new THREE.MeshStandardMaterial({ color: 0x77777c, roughness: 0.9, side: THREE.BackSide })));
   crown.scale.set(sx, sy, sz);
-  crown.position.set(0, 1.55, 0.12);
-  crown.rotation.x = -0.19;
+  crown.position.set(0, 1.5, 0.12);
+  crown.rotation.x = -0.22;
   crown.updateMatrix();
   cap.add(crown);
 
@@ -73,7 +73,7 @@ const addCap = (character: THREE.Object3D) => {
     new THREE.Mesh(visorGeo, new THREE.MeshStandardMaterial({ color: 0xe8e8ea, roughness: 0.9, emissive: 0x6a6a6c, vertexColors: true })),
     new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(edge), 60, 0.04, 8), black)
   );
-  visor.position.copy(front);
+  visor.position.copy(front).add(new THREE.Vector3(0, 0.05, 0.06)); // clear of the forehead
   visor.rotation.x = 0.06; // bill tipped slightly down
   cap.add(visor);
 
