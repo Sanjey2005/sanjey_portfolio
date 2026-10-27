@@ -18,7 +18,7 @@ const Career = () => {
                 <h4>AI & Video Analytics Intern</h4>
                 <h5>Katomaran Technologies, Coimbatore</h5>
               </div>
-              <h3>MAY 2026 — NOW</h3>
+              <h3>2026 — NOW</h3>
             </div>
             <p>
               Independently built 5 real-time video analytics for the Odisha
