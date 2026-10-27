@@ -15,15 +15,35 @@ const Career = () => {
           <div className="career-info-box">
             <div className="career-info-in">
               <div className="career-role">
-                <h4>MSc Software Systems (5 Year Integrated)</h4>
+                <h4>AI & Video Analytics Intern</h4>
+                <h5>Katomaran Technologies, Coimbatore</h5>
+              </div>
+              <h3>MAY 2026 — NOW</h3>
+            </div>
+            <p>
+              Independently built 5 real-time video analytics for the Odisha
+              Prison Project: intrusion, wall climbing, crowd detection,
+              perimeter crossing and object-thrown detection. Contributed to
+              redesigning a distributed video processing pipeline with
+              motion-triggered recording and YOLO inference workers for person
+              and vehicle detection, and assisted with model training and
+              dataset preparation for GD Naidu ITMS. Evaluated video-language
+              models with vLLM, built AI-powered incident search, and
+              contributed to an Orange Pi edge gateway for camera streaming,
+              device management and cloud onboarding.
+            </p>
+          </div>
+          <div className="career-info-box">
+            <div className="career-info-in">
+              <div className="career-role">
+                <h4>M.Sc (Integrated) Software Systems</h4>
                 <h5>PSG College of Technology, Coimbatore</h5>
               </div>
               <h3>2023 — NOW</h3>
             </div>
             <p>
-              Pursuing a 5-year integrated MSc in Software Systems, with a focus
-              on artificial intelligence, machine learning, and full-stack
-              development. Started in 2023 and currently in the program.
+              Pursuing an integrated M.Sc in Software Systems, graduating in
+              2028. Started in 2023 and currently in the program.
             </p>
           </div>
           <div className="career-info-box">
